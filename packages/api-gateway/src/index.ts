@@ -4,18 +4,15 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 
-import { createGatewayProxy } from './proxy.js';
-import { errorHandler } from './middleware/error-handler.js';
+import { createGatewayProxy } from './proxy';
+import { errorHandler } from './middleware/error-handler';
+import { authenticateJwt } from './middleware/auth';
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
 app.disable('x-powered-by');
 
-/**
- * Middlewares base de seguridad y observabilidad.
- * En esta fase todavía NO aplicamos JWT.
- */
 app.use(helmet());
 
 app.use(
@@ -40,9 +37,6 @@ app.use(
 
 app.use(morgan('dev'));
 
-/**
- * Health check del Gateway.
- */
 app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -50,15 +44,8 @@ app.get('/health', (_req, res) => {
   });
 });
 
-/**
- * Proxy real hacia microservicios internos.
- * Mantiene el path completo /api/v1/... para respetar los contratos REST.
- */
-app.use('/api/v1', createGatewayProxy());
+app.use('/api/v1', authenticateJwt, createGatewayProxy());
 
-/**
- * Fallback para rutas no encontradas fuera del proxy.
- */
 app.use((_req, res) => {
   res.status(404).json({
     error: 'Route not found',
