@@ -1,0 +1,14 @@
+{
+  "name": "uniroute",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:shared": "npm run build --workspace=packages/shared",
+    "dev": "docker compose up --build"
+  }
+}
