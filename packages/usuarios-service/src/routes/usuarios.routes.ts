@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { generateBoardingToken } from '@uniroute/shared';
 
 import {
   loginUserSchema,
@@ -31,6 +32,16 @@ function getJwtSecret(): string {
   }
 
   return jwtSecret;
+}
+
+function getQrHmacSecret(): string {
+  const qrHmacSecret = process.env.QR_HMAC_SECRET;
+
+  if (!qrHmacSecret) {
+    throw new Error('QR_HMAC_SECRET environment variable is required');
+  }
+
+  return qrHmacSecret;
 }
 
 usuariosRouter.post('/registro', async (req, res) => {
@@ -177,3 +188,63 @@ usuariosRouter.get('/me', requireGatewayAuth, async (req: AuthenticatedRequest, 
     });
   }
 });
+
+usuariosRouter.get(
+  '/me/boarding-token',
+  requireGatewayAuth,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const authUser = req.authUser;
+
+      if (!authUser) {
+        return res.status(401).json({
+          error: 'Usuario no autenticado.',
+          code: 'AUTH_CONTEXT_REQUIRED',
+        });
+      }
+
+      if (authUser.role !== 'STUDENT') {
+        return res.status(403).json({
+          error: 'Solo los estudiantes pueden generar token de abordaje.',
+          code: 'BOARDING_TOKEN_FORBIDDEN',
+        });
+      }
+
+      const user = await findUserById(authUser.id);
+
+      if (!user) {
+        return res.status(404).json({
+          error: 'Usuario no encontrado.',
+          code: 'USER_NOT_FOUND',
+        });
+      }
+
+      if (user.rol !== 'STUDENT') {
+        return res.status(403).json({
+          error: 'Solo los estudiantes pueden generar token de abordaje.',
+          code: 'BOARDING_TOKEN_FORBIDDEN',
+        });
+      }
+
+      const boardingToken = generateBoardingToken(
+        user.id,
+        user.nombre,
+        getQrHmacSecret(),
+      );
+
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+      return res.status(200).json({
+        boardingToken,
+        expiresAt,
+      });
+    } catch (error) {
+      console.error('[usuarios-service] boarding token error:', error);
+
+      return res.status(500).json({
+        error: 'Error interno al generar token de abordaje.',
+        code: 'BOARDING_TOKEN_INTERNAL_ERROR',
+      });
+    }
+  },
+);
