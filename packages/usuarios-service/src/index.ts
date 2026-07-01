@@ -6,6 +6,8 @@ import {
   closeDatabaseConnection,
 } from './db';
 
+import { usuariosRouter } from './routes/usuarios.routes';
+
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
 
@@ -33,6 +35,13 @@ app.get('/health', async (_req, res) => {
     });
   }
 });
+
+/**
+ * Rutas del Usuarios Service.
+ * El proxy del Gateway reenvía el path completo:
+ * /api/v1/usuarios/registro
+ */
+app.use('/api/v1/usuarios', usuariosRouter);
 
 app.use((_req, res) => {
   res.status(404).json({
