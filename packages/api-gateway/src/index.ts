@@ -7,6 +7,7 @@ import morgan from 'morgan';
 import { createGatewayProxy } from './proxy';
 import { errorHandler } from './middleware/error-handler';
 import { authenticateJwt } from './middleware/auth';
+import { authorizeByRole } from './middleware/rbac';
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -44,7 +45,7 @@ app.get('/health', (_req, res) => {
   });
 });
 
-app.use('/api/v1', authenticateJwt, createGatewayProxy());
+app.use('/api/v1', authenticateJwt, authorizeByRole, createGatewayProxy());
 
 app.use((_req, res) => {
   res.status(404).json({
