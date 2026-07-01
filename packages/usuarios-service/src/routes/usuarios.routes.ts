@@ -11,7 +11,13 @@ import {
   createUser,
   emailAlreadyExists,
   findUserByEmail,
+  findUserById,
 } from '../repositories/users.repository';
+
+import {
+  requireGatewayAuth,
+  type AuthenticatedRequest,
+} from '../middleware/auth-context';
 
 export const usuariosRouter = Router();
 
@@ -131,6 +137,43 @@ usuariosRouter.post('/login', async (req, res) => {
     return res.status(500).json({
       error: 'Error interno al iniciar sesión.',
       code: 'LOGIN_INTERNAL_ERROR',
+    });
+  }
+});
+
+usuariosRouter.get('/me', requireGatewayAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.authUser;
+
+    if (!authUser) {
+      return res.status(401).json({
+        error: 'Usuario no autenticado.',
+        code: 'AUTH_CONTEXT_REQUIRED',
+      });
+    }
+
+    const user = await findUserById(authUser.id);
+
+    if (!user) {
+      return res.status(404).json({
+        error: 'Usuario no encontrado.',
+        code: 'USER_NOT_FOUND',
+      });
+    }
+
+    return res.status(200).json({
+      id: user.id,
+      email: user.email,
+      nombre: user.nombre,
+      rol: user.rol,
+      createdAt: user.createdAt,
+    });
+  } catch (error) {
+    console.error('[usuarios-service] me error:', error);
+
+    return res.status(500).json({
+      error: 'Error interno al obtener el perfil.',
+      code: 'PROFILE_INTERNAL_ERROR',
     });
   }
 });
