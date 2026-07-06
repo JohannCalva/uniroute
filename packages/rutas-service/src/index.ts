@@ -117,6 +117,21 @@ app.put('/api/v1/rutas/:id', async (req, res) => {
     }
 });
 
+app.delete('/api/v1/rutas/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query(
+            `UPDATE rutas SET activa = false WHERE id = $1 RETURNING id`,
+            [id]
+        );
+        if (result.rowCount === 0) return res.status(404).json({ error: 'Ruta no encontrada', code: 'NOT_FOUND' });
+        res.status(200).json({ message: 'Ruta desactivada' });
+    } catch (error) {
+        console.error('Error desactivando ruta:', error);
+        res.status(500).json({ error: 'Error interno', code: 'INTERNAL_SERVER_ERROR' });
+    }
+});
+
 app.get('/api/v1/rutas/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -161,6 +176,48 @@ app.get('/api/v1/rutas/:id', async (req, res) => {
 // ==========================================
 // T4.7 - ENDPOINTS DE BUSES
 // ==========================================
+app.get('/api/v1/buses', async (_req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT b.id, b.placa, b.capacidad_maxima,
+                   r.id as ruta_id, r.nombre as ruta_nombre
+            FROM buses b
+                     LEFT JOIN rutas r ON b.ruta_asignada_id = r.id
+            ORDER BY b.placa ASC
+        `);
+
+        const data = await Promise.all(result.rows.map(async (row) => {
+            const statusData = await redis.hgetall(REDIS_KEYS.busStatus(row.id));
+            const aforoData = await redis.get(REDIS_KEYS.busAforo(row.id));
+
+            let estadoEnVivo = null;
+            if (statusData && Object.keys(statusData).length > 0) {
+                estadoEnVivo = {
+                    status: statusData.status as any,
+                    lat: parseFloat(statusData.lat),
+                    lng: parseFloat(statusData.lng),
+                    aforoActual: aforoData ? parseInt(aforoData, 10) : 0,
+                    lamportClock: parseInt(statusData.lamportClock || '0', 10),
+                    lastUpdate: statusData.lastUpdate
+                };
+            }
+
+            return {
+                id: row.id,
+                placa: row.placa,
+                capacidadMaxima: row.capacidad_maxima,
+                rutaAsignada: row.ruta_id ? { id: row.ruta_id, nombre: row.ruta_nombre } : null,
+                estadoEnVivo
+            };
+        }));
+
+        res.status(200).json({ data, total: data.length });
+    } catch (error) {
+        console.error('Error consultando buses:', error);
+        res.status(500).json({ error: 'Error interno del servidor', code: 'INTERNAL_SERVER_ERROR' });
+    }
+});
+
 app.get('/api/v1/buses/:id', async (req, res) => {
     try {
         const busId = req.params.id;
@@ -267,6 +324,40 @@ app.get('/api/v1/rutas/:rutaId/paradas', async (req, res) => {
         res.status(200).json({ data, total: data.length });
     } catch (error) {
         console.error('Error consultando paradas:', error);
+        res.status(500).json({ error: 'Error interno', code: 'INTERNAL_SERVER_ERROR' });
+    }
+});
+
+app.post('/api/v1/rutas/:rutaId/paradas', async (req, res) => {
+    try {
+        const { rutaId } = req.params;
+        const { nombre, latitud, longitud, orden } = req.body;
+
+        const rutaResult = await pool.query('SELECT id FROM rutas WHERE id = $1', [rutaId]);
+        if (rutaResult.rowCount === 0) {
+            return res.status(404).json({ error: 'Ruta no encontrada', code: 'NOT_FOUND' });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO paradas (ruta_id, nombre, latitud, longitud, orden)
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [rutaId, nombre, latitud, longitud, orden]
+        );
+
+        const p = result.rows[0];
+        res.status(201).json({
+            message: 'Parada agregada',
+            data: {
+                id: p.id,
+                rutaId: p.ruta_id,
+                nombre: p.nombre,
+                latitud: parseFloat(p.latitud),
+                longitud: parseFloat(p.longitud),
+                orden: p.orden
+            }
+        });
+    } catch (error) {
+        console.error('Error agregando parada:', error);
         res.status(500).json({ error: 'Error interno', code: 'INTERNAL_SERVER_ERROR' });
     }
 });
