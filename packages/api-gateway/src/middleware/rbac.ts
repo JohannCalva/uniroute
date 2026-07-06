@@ -101,12 +101,12 @@ const permissionRules: PermissionRule[] = [
   {
     method: "GET",
     pattern: /^\/api\/v1\/buses$/,
-    allowedRoles: ["ADMIN"],
+    allowedRoles: ["STUDENT", "DRIVER", "ADMIN"],
   },
   {
     method: "GET",
     pattern: /^\/api\/v1\/buses\/[^/]+$/,
-    allowedRoles: ["ADMIN"],
+    allowedRoles: ["STUDENT", "DRIVER", "ADMIN"],
   },
   {
     method: "POST",
