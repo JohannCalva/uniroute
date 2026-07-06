@@ -1,6 +1,6 @@
-import type { NextFunction, Request, Response } from 'express';
+import type { NextFunction, Request, Response } from "express";
 
-type UserRole = 'STUDENT' | 'DRIVER' | 'ADMIN';
+type UserRole = "STUDENT" | "DRIVER" | "ADMIN";
 
 interface PermissionRule {
   method: string;
@@ -8,7 +8,9 @@ interface PermissionRule {
   allowedRoles: UserRole[];
 }
 
-function getHeaderAsString(value: string | string[] | undefined): string | null {
+function getHeaderAsString(
+  value: string | string[] | undefined,
+): string | null {
   if (!value) {
     return null;
   }
@@ -21,7 +23,7 @@ function getHeaderAsString(value: string | string[] | undefined): string | null 
 }
 
 function getRequestPath(req: Request): string {
-  return req.originalUrl.split('?')[0];
+  return req.originalUrl.split("?")[0];
 }
 
 function isPublicRoute(req: Request): boolean {
@@ -29,8 +31,8 @@ function isPublicRoute(req: Request): boolean {
   const path = getRequestPath(req);
 
   return (
-    (method === 'POST' && path === '/api/v1/usuarios/registro') ||
-    (method === 'POST' && path === '/api/v1/usuarios/login')
+    (method === "POST" && path === "/api/v1/usuarios/registro") ||
+    (method === "POST" && path === "/api/v1/usuarios/login")
   );
 }
 
@@ -39,125 +41,130 @@ const permissionRules: PermissionRule[] = [
    * Usuarios
    */
   {
-    method: 'GET',
+    method: "GET",
     pattern: /^\/api\/v1\/usuarios\/me$/,
-    allowedRoles: ['STUDENT', 'DRIVER', 'ADMIN'],
+    allowedRoles: ["STUDENT", "DRIVER", "ADMIN"],
   },
   {
-    method: 'GET',
+    method: "GET",
     pattern: /^\/api\/v1\/usuarios\/me\/boarding-token$/,
-    allowedRoles: ['STUDENT'],
+    allowedRoles: ["STUDENT"],
   },
 
   /**
    * Rutas públicas para usuarios autenticados
    */
   {
-    method: 'GET',
+    method: "GET",
     pattern: /^\/api\/v1\/rutas$/,
-    allowedRoles: ['STUDENT', 'DRIVER', 'ADMIN'],
+    allowedRoles: ["STUDENT", "DRIVER", "ADMIN"],
   },
   {
-    method: 'GET',
+    method: "GET",
     pattern: /^\/api\/v1\/rutas\/[^/]+$/,
-    allowedRoles: ['STUDENT', 'DRIVER', 'ADMIN'],
+    allowedRoles: ["STUDENT", "DRIVER", "ADMIN"],
   },
   {
-    method: 'GET',
+    method: "GET",
     pattern: /^\/api\/v1\/rutas\/[^/]+\/paradas$/,
-    allowedRoles: ['STUDENT', 'DRIVER', 'ADMIN'],
+    allowedRoles: ["STUDENT", "DRIVER", "ADMIN"],
   },
 
   /**
    * Administración de rutas, buses y paradas
    */
   {
-    method: 'POST',
+    method: "POST",
     pattern: /^\/api\/v1\/rutas$/,
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ["ADMIN"],
   },
   {
-    method: 'PUT',
+    method: "PUT",
     pattern: /^\/api\/v1\/rutas\/[^/]+$/,
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ["ADMIN"],
   },
   {
-    method: 'DELETE',
+    method: "DELETE",
     pattern: /^\/api\/v1\/rutas\/[^/]+$/,
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ["ADMIN"],
   },
   {
-    method: 'POST',
+    method: "POST",
     pattern: /^\/api\/v1\/rutas\/[^/]+\/paradas$/,
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ["ADMIN"],
   },
   {
-    method: 'PUT',
+    method: "PUT",
     pattern: /^\/api\/v1\/paradas\/[^/]+$/,
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ["ADMIN"],
   },
   {
-    method: 'GET',
+    method: "GET",
     pattern: /^\/api\/v1\/buses$/,
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ["ADMIN"],
   },
   {
-    method: 'GET',
+    method: "GET",
     pattern: /^\/api\/v1\/buses\/[^/]+$/,
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ["ADMIN"],
   },
   {
-    method: 'POST',
+    method: "POST",
     pattern: /^\/api\/v1\/buses$/,
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ["ADMIN"],
   },
   {
-    method: 'PUT',
+    method: "PUT",
     pattern: /^\/api\/v1\/buses\/[^/]+\/asignar$/,
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ["ADMIN"],
   },
   {
-    method: 'GET',
+    method: "GET",
     pattern: /^\/api\/v1\/viajes\/historial$/,
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ["ADMIN"],
   },
 
   /**
    * Despachos - estudiante
    */
   {
-    method: 'POST',
+    method: "POST",
     pattern: /^\/api\/v1\/despachos\/proximidad$/,
-    allowedRoles: ['STUDENT'],
+    allowedRoles: ["STUDENT"],
   },
 
   /**
    * Despachos - conductor
    */
   {
-    method: 'POST',
+    method: "POST",
     pattern: /^\/api\/v1\/despachos\/estado$/,
-    allowedRoles: ['DRIVER'],
+    allowedRoles: ["DRIVER"],
   },
   {
-    method: 'POST',
+    method: "POST",
     pattern: /^\/api\/v1\/despachos\/gps$/,
-    allowedRoles: ['DRIVER'],
+    allowedRoles: ["DRIVER"],
   },
   {
-    method: 'POST',
+    method: "POST",
     pattern: /^\/api\/v1\/despachos\/abordaje$/,
-    allowedRoles: ['DRIVER'],
+    allowedRoles: ["DRIVER"],
   },
   {
-    method: 'POST',
+    method: "POST",
     pattern: /^\/api\/v1\/despachos\/viaje\/iniciar$/,
-    allowedRoles: ['DRIVER'],
+    allowedRoles: ["DRIVER"],
   },
   {
-    method: 'POST',
+    method: "POST",
     pattern: /^\/api\/v1\/despachos\/viaje\/finalizar$/,
-    allowedRoles: ['DRIVER'],
+    allowedRoles: ["DRIVER"],
+  },
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/despachos\/bus\/[^/]+\/estado$/,
+    allowedRoles: ["STUDENT", "DRIVER", "ADMIN"],
   },
 ];
 
@@ -177,7 +184,7 @@ export function authorizeByRole(
   res: Response,
   next: NextFunction,
 ) {
-  if (req.method.toUpperCase() === 'OPTIONS') {
+  if (req.method.toUpperCase() === "OPTIONS") {
     return next();
   }
 
@@ -185,12 +192,14 @@ export function authorizeByRole(
     return next();
   }
 
-  const userRole = getHeaderAsString(req.headers['x-user-role']) as UserRole | null;
+  const userRole = getHeaderAsString(
+    req.headers["x-user-role"],
+  ) as UserRole | null;
 
-  if (!userRole || !['STUDENT', 'DRIVER', 'ADMIN'].includes(userRole)) {
+  if (!userRole || !["STUDENT", "DRIVER", "ADMIN"].includes(userRole)) {
     return res.status(403).json({
-      error: 'Rol no disponible o inválido.',
-      code: 'ROLE_REQUIRED',
+      error: "Rol no disponible o inválido.",
+      code: "ROLE_REQUIRED",
     });
   }
 
@@ -203,15 +212,15 @@ export function authorizeByRole(
    */
   if (!rule) {
     return res.status(403).json({
-      error: 'No existe una regla de permisos para este endpoint.',
-      code: 'RBAC_RULE_NOT_FOUND',
+      error: "No existe una regla de permisos para este endpoint.",
+      code: "RBAC_RULE_NOT_FOUND",
     });
   }
 
   if (!rule.allowedRoles.includes(userRole)) {
     return res.status(403).json({
-      error: 'No tienes permisos para acceder a este recurso.',
-      code: 'FORBIDDEN',
+      error: "No tienes permisos para acceder a este recurso.",
+      code: "FORBIDDEN",
     });
   }
 

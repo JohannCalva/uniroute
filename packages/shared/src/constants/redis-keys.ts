@@ -3,5 +3,6 @@ export const REDIS_KEYS = {
   busAforo: (busId: string) => `bus:${busId}:aforo`,
   busCapacidad: (busId: string) => `bus:${busId}:capacidad`,
   rutaEsperando: (rutaId: string) => `ruta:${rutaId}:esperando`,
+  rutaDistancia: (rutaId: string) => `ruta:${rutaId}:distancia`,
   viajeActivo: (viajeId: string) => `viaje:${viajeId}:activo`,
 } as const;
