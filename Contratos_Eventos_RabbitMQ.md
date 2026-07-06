@@ -271,7 +271,7 @@ interface ProximityStudent {
 | `conductor:{busId}` | El conductor de ese bus | `proximity:update` |
 | `admin:fleet` | El dashboard admin | Todos los eventos de todos los buses |
 
-> **Nota de implementación:** el stub actual de `packages/websocket-server/src/index.ts` (entregable de Fase 0, aún sin lógica real) usa el room `route:{routeId}` (inglés) y recibe `routeId` como string plano en el evento `subscribe:route`, en vez de `ruta:{routeId}` con payload `{ routeId }` como define este contrato. Rol 5 debe alinear el código a este documento al implementar T5.9 — este contrato es la fuente de verdad, no el stub.
+> **Nota de implementación:** `packages/websocket-server/src/index.ts` ya maneja `subscribe:route`/`unsubscribe:route` para unir/sacar al cliente del room, pero usa `route:{routeId}` (inglés) y recibe `routeId` como string plano, en vez de `ruta:{routeId}` con payload `{ routeId }` como define este contrato. Más importante: **no existe todavía ningún consumidor de RabbitMQ** — no se declara la cola `ws.bus.events`, no hay binding `bus.#` al exchange, y no hay ningún `channel.consume()`. `despachos-service` ya publica los `BusEvent` correctamente del lado emisor; simplemente no hay nada del lado de `websocket-server` que los reciba y reemita por Socket.io. Rol 5 debe implementar esa parte de T5.9 y alinear los nombres de room a este documento — este contrato es la fuente de verdad, no el código actual.
 
 ### Protocolo de suscripción del cliente Socket.io
 
