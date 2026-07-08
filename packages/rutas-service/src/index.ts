@@ -45,7 +45,7 @@ app.get('/api/v1/rutas', async (req, res) => {
             return res.status(200).json({ data: [], total: 0 });
         }
 
-        const rutaIds = rutas.map(r => r.id);
+        const rutaIds = rutas.map(ruta => ruta.id);
         const paradasResult = await pool.query(
             'SELECT * FROM paradas WHERE ruta_id = ANY($1::uuid[]) ORDER BY orden ASC',
             [rutaIds]
@@ -54,14 +54,14 @@ app.get('/api/v1/rutas', async (req, res) => {
 
         const data = rutas.map(ruta => {
             const paradasRuta = paradas
-                .filter(p => p.ruta_id === ruta.id)
-                .map(p => ({
-                    id: p.id,
-                    rutaId: p.ruta_id,
-                    nombre: p.nombre,
-                    latitud: parseFloat(p.latitud),
-                    longitud: parseFloat(p.longitud),
-                    orden: p.orden
+                .filter(parada => parada.ruta_id === ruta.id)
+                .map(parada => ({
+                    id: parada.id,
+                    rutaId: parada.ruta_id,
+                    nombre: parada.nombre,
+                    latitud: parseFloat(parada.latitud),
+                    longitud: parseFloat(parada.longitud),
+                    orden: parada.orden
                 }));
 
             return {
@@ -147,13 +147,13 @@ app.get('/api/v1/rutas/:id', async (req, res) => {
             [id]
         );
 
-        const paradas = paradasResult.rows.map(p => ({
-            id: p.id,
-            rutaId: p.ruta_id,
-            nombre: p.nombre,
-            latitud: parseFloat(p.latitud),
-            longitud: parseFloat(p.longitud),
-            orden: p.orden
+        const paradas = paradasResult.rows.map(parada => ({
+            id: parada.id,
+            rutaId: parada.ruta_id,
+            nombre: parada.nombre,
+            latitud: parseFloat(parada.latitud),
+            longitud: parseFloat(parada.longitud),
+            orden: parada.orden
         }));
 
         res.status(200).json({
@@ -312,13 +312,13 @@ app.get('/api/v1/rutas/:rutaId/paradas', async (req, res) => {
             [rutaId]
         );
 
-        const data = result.rows.map(p => ({
-            id: p.id,
-            rutaId: p.ruta_id,
-            nombre: p.nombre,
-            latitud: parseFloat(p.latitud),
-            longitud: parseFloat(p.longitud),
-            orden: p.orden
+        const data = result.rows.map(parada => ({
+            id: parada.id,
+            rutaId: parada.ruta_id,
+            nombre: parada.nombre,
+            latitud: parseFloat(parada.latitud),
+            longitud: parseFloat(parada.longitud),
+            orden: parada.orden
         }));
 
         res.status(200).json({ data, total: data.length });
@@ -344,16 +344,16 @@ app.post('/api/v1/rutas/:rutaId/paradas', async (req, res) => {
             [rutaId, nombre, latitud, longitud, orden]
         );
 
-        const p = result.rows[0];
+        const parada = result.rows[0];
         res.status(201).json({
             message: 'Parada agregada',
             data: {
-                id: p.id,
-                rutaId: p.ruta_id,
-                nombre: p.nombre,
-                latitud: parseFloat(p.latitud),
-                longitud: parseFloat(p.longitud),
-                orden: p.orden
+                id: parada.id,
+                rutaId: parada.ruta_id,
+                nombre: parada.nombre,
+                latitud: parseFloat(parada.latitud),
+                longitud: parseFloat(parada.longitud),
+                orden: parada.orden
             }
         });
     } catch (error) {

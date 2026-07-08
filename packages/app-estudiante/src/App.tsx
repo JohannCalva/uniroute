@@ -56,15 +56,15 @@ export default function App() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
             });
-            const data = await res.json();
+            const loginResponse = await res.json();
             if (res.ok) {
-                if (data.user.rol !== 'STUDENT') {
+                if (loginResponse.user.rol !== 'STUDENT') {
                     return setErrorLogin("Esta aplicación es exclusiva para estudiantes.");
                 }
-                setAuth(data);
-                localStorage.setItem('uniroute_estudiante', JSON.stringify(data));
+                setAuth(loginResponse);
+                localStorage.setItem('uniroute_estudiante', JSON.stringify(loginResponse));
             } else {
-                setErrorLogin(data.error || 'Credenciales inválidas');
+                setErrorLogin(loginResponse.error || 'Credenciales inválidas');
             }
         } catch {
             setErrorLogin('Error conectando al servidor');
@@ -91,8 +91,8 @@ export default function App() {
         setCargando(true);
         fetch('/api/v1/rutas?activa=true', { headers: getHeaders() })
             .then(res => res.json())
-            .then(data => {
-                if (data?.data) setRutas(data.data);
+            .then(rutasResponse => {
+                if (rutasResponse?.data) setRutas(rutasResponse.data);
                 setCargando(false);
             }).catch(() => setCargando(false));
 
@@ -105,7 +105,7 @@ export default function App() {
         if (!auth || activeTab !== 'qr') return;
         fetch('/api/v1/usuarios/me/boarding-token', { headers: getHeaders() })
             .then(res => res.json())
-            .then(data => { if (data.boardingToken) setBoardingToken(data.boardingToken); })
+            .then(tokenResponse => { if (tokenResponse.boardingToken) setBoardingToken(tokenResponse.boardingToken); })
             .catch(console.error);
     }, [auth, activeTab]);
 
@@ -116,15 +116,15 @@ export default function App() {
 
         socket.on('connect', () => socket.emit('subscribe:route', { routeId: rutaSeleccionada.id }));
 
-        socket.on('bus:gps', (data) => {
+        socket.on('bus:gps', (gpsEvent) => {
             setBusesActivos(prev => ({
                 ...prev,
-                [data.busId]: { lat: data.payload.latitude, lng: data.payload.longitude }
+                [gpsEvent.busId]: { lat: gpsEvent.payload.latitude, lng: gpsEvent.payload.longitude }
             }));
         });
 
-        socket.on('bus:status', (data) => {
-            const status = data.payload.newStatus;
+        socket.on('bus:status', (statusEvent) => {
+            const status = statusEvent.payload.newStatus;
             if (status === 'DEPARTING') dispararNotificacion("¡El bus sale en 5 minutos!", "warning");
             else if (status === 'FULL') dispararNotificacion("BUS LLENO - Busca otra unidad.", "error");
             else if (status === 'ARRIVED') dispararNotificacion("El bus ha llegado a su destino.", "info");

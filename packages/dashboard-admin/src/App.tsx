@@ -38,10 +38,10 @@ export default function App() {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
             });
-            const data = await res.json();
+            const loginResponse = await res.json();
             if (res.ok) {
-                if (data.user.rol !== 'ADMIN') return setErrorLogin('Acceso denegado. Rol ADMIN requerido.');
-                setAuth(data); localStorage.setItem('uniroute_admin_auth', JSON.stringify(data));
+                if (loginResponse.user.rol !== 'ADMIN') return setErrorLogin('Acceso denegado. Rol ADMIN requerido.');
+                setAuth(loginResponse); localStorage.setItem('uniroute_admin_auth', JSON.stringify(loginResponse));
             } else { setErrorLogin('Credenciales inválidas'); }
         } catch { setErrorLogin('Error de red'); }
     };
@@ -52,12 +52,12 @@ export default function App() {
         if (!auth) return;
         if (activeTab === 'flota') {
             fetch('/api/v1/buses', { headers: getHeaders() })
-                .then(r => r.json())
-                .then(data => {
+                .then(res => res.json())
+                .then(busesResponse => {
                     const mapBuses: any = {};
-                    (data.data || []).forEach((b: any) => {
-                        if (b.estadoEnVivo) {
-                            mapBuses[b.id] = { ...b.estadoEnVivo, placa: b.placa, rutaNombre: b.rutaAsignada?.nombre, capacidadMaxima: b.capacidadMaxima };
+                    (busesResponse.data || []).forEach((bus: any) => {
+                        if (bus.estadoEnVivo) {
+                            mapBuses[bus.id] = { ...bus.estadoEnVivo, placa: bus.placa, rutaNombre: bus.rutaAsignada?.nombre, capacidadMaxima: bus.capacidadMaxima };
                         }
                     });
                     setFlota(mapBuses);
@@ -65,15 +65,15 @@ export default function App() {
 
             const socket: Socket = io('/', { path: '/socket.io/', transports: ['websocket'] });
             socket.on('connect', () => socket.emit('subscribe:admin'));
-            socket.on('bus:gps', (d) => setFlota(p => p[d.busId] ? { ...p, [d.busId]: { ...p[d.busId], lat: d.payload.latitude, lng: d.payload.longitude } } : p));
-            socket.on('bus:status', (d) => setFlota(p => p[d.busId] ? { ...p, [d.busId]: { ...p[d.busId], status: d.payload.newStatus } } : p));
-            socket.on('bus:aforo', (d) => setFlota(p => p[d.busId] ? { ...p, [d.busId]: { ...p[d.busId], aforoActual: d.payload.aforoActual } } : p));
+            socket.on('bus:gps', (gpsEvent) => setFlota(prevFlota => prevFlota[gpsEvent.busId] ? { ...prevFlota, [gpsEvent.busId]: { ...prevFlota[gpsEvent.busId], lat: gpsEvent.payload.latitude, lng: gpsEvent.payload.longitude } } : prevFlota));
+            socket.on('bus:status', (statusEvent) => setFlota(prevFlota => prevFlota[statusEvent.busId] ? { ...prevFlota, [statusEvent.busId]: { ...prevFlota[statusEvent.busId], status: statusEvent.payload.newStatus } } : prevFlota));
+            socket.on('bus:aforo', (aforoEvent) => setFlota(prevFlota => prevFlota[aforoEvent.busId] ? { ...prevFlota, [aforoEvent.busId]: { ...prevFlota[aforoEvent.busId], aforoActual: aforoEvent.payload.aforoActual } } : prevFlota));
             return () => { socket.disconnect(); };
         } else {
             setCargandoHistorial(true);
             fetch('/api/v1/viajes/historial', { headers: getHeaders() })
-                .then(r => r.json())
-                .then(data => setHistorial(data.data || []))
+                .then(res => res.json())
+                .then(historialResponse => setHistorial(historialResponse.data || []))
                 .finally(() => setCargandoHistorial(false));
         }
     }, [auth, activeTab]);
@@ -204,7 +204,7 @@ export default function App() {
                                 <button onClick={() => {
                                     setCargandoHistorial(true);
                                     fetch('/api/v1/viajes/historial', { headers: getHeaders() })
-                                        .then(r => r.json()).then(d => setHistorial(d.data || [])).finally(() => setCargandoHistorial(false));
+                                        .then(res => res.json()).then(historialResponse => setHistorial(historialResponse.data || [])).finally(() => setCargandoHistorial(false));
                                 }} className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-lg transition-colors flex items-center gap-2 text-sm">
                                     ↻ Actualizar
                                 </button>

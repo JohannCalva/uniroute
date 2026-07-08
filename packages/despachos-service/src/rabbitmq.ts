@@ -39,28 +39,22 @@ export async function connectRabbitMQ(): Promise<void> {
       console.warn("[despachos-service] RabbitMQ connection closed");
       connection = null;
       channel = null;
-      if (!isReconnecting) {
-        scheduleReconnect();
-      }
+      scheduleReconnect();
     });
   } catch (err) {
     console.error("[despachos-service] Failed to connect to RabbitMQ:", err);
-    if (!isReconnecting) {
-      scheduleReconnect();
-    }
+    scheduleReconnect();
   }
 }
 
 function scheduleReconnect() {
+  if (isReconnecting) return;
   isReconnecting = true;
-  setTimeout(async () => {
+  console.warn("[despachos-service] Retrying RabbitMQ connection in 5s...");
+  setTimeout(() => {
     console.log("[despachos-service] Attempting to reconnect to RabbitMQ...");
-    try {
-      await connectRabbitMQ();
-      isReconnecting = false;
-    } catch (e) {
-      scheduleReconnect(); // Retry again
-    }
+    isReconnecting = false;
+    connectRabbitMQ();
   }, 5000);
 }
 

@@ -1,9 +1,17 @@
+# SINCRONIZACIÓN DE RELOJES FÍSICOS (S8 — NTP):
+# Todos los contenedores heredan automáticamente el reloj del host Docker,
+# que se sincroniza vía NTP con servidores Stratum 2/3 del sistema operativo.
+# Esto garantiza marcas de tiempo TIMESTAMPTZ consistentes en PostgreSQL
+# sin necesidad de configurar NTP dentro de cada contenedor.
+# Ref: https://docs.docker.com/engine/faq/#does-docker-use-the-host-clock
+
 services:
   nginx:
     build:
       context: ./nginx
     ports:
       - "${NGINX_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
     depends_on:
       - app-estudiante
       - app-conductor
@@ -26,6 +34,12 @@ services:
       - usuarios-service
       - rutas-service
       - despachos-service
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - uniroute-network
 
@@ -42,6 +56,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - uniroute-network
 
@@ -59,6 +79,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - uniroute-network
 
@@ -80,6 +106,12 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3004/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - uniroute-network
 
@@ -94,14 +126,21 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - uniroute-network
 
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "15672:15672"  # Panel admin — remover en producción
+    expose:
+      - "5672"
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -115,8 +154,8 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -134,8 +173,8 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

@@ -302,23 +302,23 @@ export class DespachosService {
     lng: number,
   ) {
     // 1. Obtener paradas de la ruta desde PostgreSQL
-    const res = await pool.query(
+    const paradasResult = await pool.query(
       `SELECT id, nombre, latitud, longitud FROM paradas WHERE ruta_id = $1 ORDER BY orden ASC`,
       [rutaId],
     );
 
-    if (res.rowCount === 0) throw new Error("No hay paradas para esta ruta");
-    const paradas = res.rows;
+    if (paradasResult.rowCount === 0) throw new Error("No hay paradas para esta ruta");
+    const paradas = paradasResult.rows;
 
     // 2. Nearest stop via haversine
     let nearestStop = paradas[0];
     let minDistance = Infinity;
 
-    for (const p of paradas) {
-      const dist = haversineDistance(lat, lng, p.latitud, p.longitud);
+    for (const parada of paradas) {
+      const dist = haversineDistance(lat, lng, parada.latitud, parada.longitud);
       if (dist < minDistance) {
         minDistance = dist;
-        nearestStop = p;
+        nearestStop = parada;
       }
     }
 
@@ -372,9 +372,9 @@ export class DespachosService {
       totalStudentsWaiting: awaiting.length,
       maxEtaSeconds: maxEta,
       nearestStopName: nearestStop.nombre,
-      students: awaiting.slice(0, 10).map((s: any) => ({
-        etaSeconds: s.score,
-        distanceMeters: s.dist,
+      students: awaiting.slice(0, 10).map((student: any) => ({
+        etaSeconds: student.score,
+        distanceMeters: student.dist,
       })),
     };
 

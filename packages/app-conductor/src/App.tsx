@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { io, Socket } from 'socket.io-client';
+import { useEventBuffer } from './useEventBuffer';
 
 type BusStatus = 'AT_STOP' | 'DEPARTING' | 'EN_ROUTE' | 'FULL' | 'ARRIVED';
 type AuthData = { token: string; user: { id: string; nombre: string } } | null;
@@ -28,8 +29,24 @@ export default function App() {
     const [alertaProximidad, setAlertaProximidad] = useState<{ total: number, maxEta: number } | null>(null);
     const [scanResult, setScanResult] = useState<{ success: boolean; mensaje: string } | null>(null);
     const [cargando, setCargando] = useState(false);
+    const [feedback, setFeedback] = useState<string | null>(null);
 
     const getHeaders = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${auth?.token}` });
+
+    // Buffer de eventos con retry-pattern (S2/S3/S8). Se sincroniza solo al recuperar red.
+    const { isOnline, pendingCount, justSynced, enqueue, flush } = useEventBuffer({
+        token: auth ? `Bearer ${auth.token}` : null,
+    });
+
+    const flashFeedback = (mensaje: string) => {
+        setFeedback(mensaje);
+        setTimeout(() => setFeedback((actual) => (actual === mensaje ? null : actual)), 4000);
+    };
+
+    // Al iniciar sesión, si quedaron eventos pendientes de una sesión previa, intentar enviarlos.
+    useEffect(() => {
+        if (auth?.token) void flush();
+    }, [auth?.token, flush]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -39,10 +56,10 @@ export default function App() {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
             });
-            const data = await res.json();
+            const loginResponse = await res.json();
             if (res.ok) {
-                if (data.user.rol !== 'DRIVER') return setErrorLogin('Acceso denegado. Se requiere rol de Conductor.');
-                setAuth(data); localStorage.setItem('uniroute_conductor', JSON.stringify(data));
+                if (loginResponse.user.rol !== 'DRIVER') return setErrorLogin('Acceso denegado. Se requiere rol de Conductor.');
+                setAuth(loginResponse); localStorage.setItem('uniroute_conductor', JSON.stringify(loginResponse));
             } else { setErrorLogin('Credenciales inválidas'); }
         } catch { setErrorLogin('Error de conexión'); }
     };
@@ -51,8 +68,8 @@ export default function App() {
 
     useEffect(() => {
         if (!auth || viajeActivo) return;
-        fetch('/api/v1/buses', { headers: getHeaders() }).then(r => r.json()).then(d => setBuses(d.data || []));
-        fetch('/api/v1/rutas?activa=true', { headers: getHeaders() }).then(r => r.json()).then(d => setRutas(d.data || []));
+        fetch('/api/v1/buses', { headers: getHeaders() }).then(res => res.json()).then(body => setBuses(body.data || []));
+        fetch('/api/v1/rutas?activa=true', { headers: getHeaders() }).then(res => res.json()).then(body => setRutas(body.data || []));
     }, [auth, viajeActivo]);
 
     const iniciarViaje = async () => {
@@ -69,25 +86,48 @@ export default function App() {
     const cambiarEstadoBus = async (nuevoEstado: BusStatus) => {
         if (estadoActual === nuevoEstado) return;
         setCargando(true);
+
+        // Regla 1 de Lamport: incrementar SIEMPRE el reloj local antes de emitir,
+        // haya o no conexión, para preservar la secuencia causal del evento.
         const nuevoReloj = lamportClock + 1;
         setLamportClock(nuevoReloj);
 
+        const endpoint = '/api/v1/despachos/estado';
+        const body = { busId, status: nuevoEstado, lamportClock: nuevoReloj };
+
+        // UI optimista: reflejar de inmediato la intención del conductor.
+        setEstadoActual(nuevoEstado);
+
         try {
-            const res = await fetch('/api/v1/despachos/estado', {
-                method: 'POST', headers: getHeaders(), body: JSON.stringify({ busId, status: nuevoEstado, lamportClock: nuevoReloj })
+            if (!navigator.onLine) throw new Error('offline');
+
+            const res = await fetch(endpoint, {
+                method: 'POST', headers: getHeaders(), body: JSON.stringify(body),
             });
+
             if (res.ok) {
-                const data = await res.json();
-                if (data.serverLamportClock) setLamportClock(Math.max(nuevoReloj, data.serverLamportClock));
-                setEstadoActual(nuevoEstado);
-                if (nuevoEstado === 'ARRIVED') finalizarViaje();
+                const statusResponse = await res.json();
+                if (statusResponse.serverLamportClock) setLamportClock(Math.max(nuevoReloj, statusResponse.serverLamportClock));
+            } else if (res.status >= 500) {
+                // Falla transitoria del servidor: retener para reintento.
+                throw new Error('server');
             }
-        } catch (error) { console.error(error); } finally { setCargando(false); }
+            // 4xx: error de cliente (estado inválido), no se reintenta.
+        } catch {
+            // Offline o falla transitoria: retener el evento con su lamportClock ORIGINAL,
+            // nunca descartarlo. Se reenviará automáticamente al recuperar conexión.
+            enqueue({ endpoint, method: 'POST', body });
+            flashFeedback('📥 Evento guardado, se enviará al recuperar conexión.');
+        } finally {
+            // El backend finaliza el viaje al procesar ARRIVED (sea ahora o al sincronizar).
+            if (nuevoEstado === 'ARRIVED') finalizarViajeLocal();
+            setCargando(false);
+        }
     };
 
-    const finalizarViaje = async () => {
+    const finalizarViajeLocal = () => {
+        // El backend ya finaliza el viaje al procesar el cambio de estado a ARRIVED
         setTransmitiendoGps(false);
-        await fetch('/api/v1/despachos/viaje/finalizar', { method: 'POST', headers: getHeaders(), body: JSON.stringify({ busId }) });
         setViajeActivo(false);
         alert("Viaje finalizado correctamente.");
     };
@@ -96,7 +136,7 @@ export default function App() {
         if (!viajeActivo) return;
         const socket: Socket = io('/', { path: '/socket.io/', transports: ['websocket'] });
         socket.on('connect', () => socket.emit('subscribe:driver', { busId }));
-        socket.on('proximity:update', (data) => setAlertaProximidad({ total: data.totalStudentsWaiting, maxEta: data.maxEtaSeconds }));
+        socket.on('proximity:update', (proximityEvent) => setAlertaProximidad({ total: proximityEvent.totalStudentsWaiting, maxEta: proximityEvent.maxEtaSeconds }));
         return () => { socket.disconnect(); };
     }, [viajeActivo, busId]);
 
@@ -112,6 +152,9 @@ export default function App() {
             if (navigator.geolocation) {
                 watchId = navigator.geolocation.watchPosition(
                     (pos) => {
+                        // El GPS es efímero: si no hay red, se omite el envío (no se encola).
+                        // watchPosition sigue disparando, así que se reanuda solo al volver la red.
+                        if (!navigator.onLine) return;
                         fetch('/api/v1/despachos/gps', {
                             method: 'POST', headers: getHeaders(),
                             body: JSON.stringify({ busId, latitude: pos.coords.latitude, longitude: pos.coords.longitude })
@@ -141,11 +184,11 @@ export default function App() {
                     const response = await fetch('/api/v1/despachos/abordaje', {
                         method: 'POST', headers: getHeaders(), body: JSON.stringify({ busId, boardingToken: decodedText })
                     });
-                    const data = await response.json();
+                    const abordajeResponse = await response.json();
                     if (response.ok) {
-                        setScanResult({ success: true, mensaje: `✅ Pasajero: ${data.studentName} - Aforo: ${data.aforoActual}/${data.capacidadMaxima}` });
+                        setScanResult({ success: true, mensaje: `✅ Pasajero: ${abordajeResponse.studentName} - Aforo: ${abordajeResponse.aforoActual}/${abordajeResponse.capacidadMaxima}` });
                     } else {
-                        setScanResult({ success: false, mensaje: `❌ ${data.error || 'Token inválido'}` });
+                        setScanResult({ success: false, mensaje: `❌ ${abordajeResponse.error || 'Token inválido'}` });
                     }
                 } catch { setScanResult({ success: false, mensaje: "❌ Error de conexión." }); }
                 setTimeout(() => { setScanResult(null); scanner.resume(); }, 3000);
@@ -202,6 +245,15 @@ export default function App() {
                     <span className="text-xs text-gray-400 font-medium">Conductor: {auth.user.nombre}</span>
                 </div>
                 <div className="flex items-center gap-4">
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold uppercase ${isOnline ? 'bg-green-900/40 border-green-700 text-green-300' : 'bg-red-900/40 border-red-700 text-red-300'}`}>
+                        <span className={`inline-block h-2 w-2 rounded-full ${isOnline ? 'bg-green-400' : 'bg-red-400 animate-pulse'}`} />
+                        {isOnline ? 'En línea' : 'Sin conexión'}
+                    </div>
+                    {pendingCount > 0 && (
+                        <div className="flex items-center gap-1.5 bg-amber-900/40 px-3 py-1.5 rounded-full border border-amber-700 text-xs font-bold text-amber-300" title="Eventos guardados pendientes de reenvío">
+                            📥 {pendingCount} pendiente{pendingCount > 1 ? 's' : ''}
+                        </div>
+                    )}
                     <div className="flex items-center gap-2 bg-gray-900 px-3 py-1.5 rounded-full border border-gray-800">
                         <span className="text-xs font-bold text-gray-400 uppercase">GPS</span>
                         <button onClick={() => setTransmitiendoGps(!transmitiendoGps)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${transmitiendoGps ? 'bg-red-600' : 'bg-gray-600'}`}>
@@ -218,6 +270,21 @@ export default function App() {
             </nav>
 
             <main className="flex-1 container mx-auto p-4 max-w-md flex flex-col justify-center gap-4">
+                {feedback && (
+                    <div className="animate-fade-in bg-amber-500/20 border border-amber-500/50 text-amber-200 p-3 rounded-2xl text-sm font-bold text-center shadow-lg">
+                        {feedback}
+                    </div>
+                )}
+                {justSynced && (
+                    <div className="animate-fade-in bg-green-600/20 border border-green-500/50 text-green-200 p-3 rounded-2xl text-sm font-bold text-center shadow-lg">
+                        ✓ Eventos sincronizados
+                    </div>
+                )}
+                {pendingCount > 0 && (
+                    <div className="animate-fade-in bg-amber-900/30 border border-amber-500/40 text-amber-200 p-3 rounded-2xl text-xs font-semibold text-center">
+                        📥 {pendingCount} evento{pendingCount > 1 ? 's' : ''} en cola — se reenviará{pendingCount > 1 ? 'n' : ''} automáticamente al recuperar conexión.
+                    </div>
+                )}
                 {alertaProximidad && alertaProximidad.total > 0 && (
                     <div className="animate-fade-in bg-blue-900/30 border border-blue-500/50 p-4 rounded-2xl flex items-center gap-4 shadow-lg mb-2">
                         <span className="text-4xl drop-shadow-md">🏃‍♂️</span>

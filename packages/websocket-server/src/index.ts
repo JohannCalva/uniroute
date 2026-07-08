@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { RABBITMQ_CONFIG } from '@uniroute/shared';
+import { connectRabbitMQConsumer } from './rabbitmq-consumer';
 
 const app = express();
 const httpServer = createServer(app);
@@ -17,15 +17,39 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'websocket-server' });
 });
 
+function extractRouteId(payload: string | { routeId: string }): string {
+  return typeof payload === 'string' ? payload : payload.routeId;
+}
+
+function extractBusId(payload: string | { busId: string }): string {
+  return typeof payload === 'string' ? payload : payload.busId;
+}
+
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
 
-  socket.on('subscribe:route', (routeId: string) => {
-    socket.join(`route:${routeId}`);
+  socket.on('subscribe:route', (payload) => {
+    socket.join(`route:${extractRouteId(payload)}`);
   });
 
-  socket.on('unsubscribe:route', (routeId: string) => {
-    socket.leave(`route:${routeId}`);
+  socket.on('unsubscribe:route', (payload) => {
+    socket.leave(`route:${extractRouteId(payload)}`);
+  });
+
+  socket.on('subscribe:driver', (payload) => {
+    socket.join(`conductor:${extractBusId(payload)}`);
+  });
+
+  socket.on('unsubscribe:driver', (payload) => {
+    socket.leave(`conductor:${extractBusId(payload)}`);
+  });
+
+  socket.on('subscribe:admin', () => {
+    socket.join('admin:fleet');
+  });
+
+  socket.on('unsubscribe:admin', () => {
+    socket.leave('admin:fleet');
   });
 
   socket.on('disconnect', () => {
@@ -33,7 +57,7 @@ io.on('connection', (socket) => {
   });
 });
 
-console.log(`Using exchange: ${RABBITMQ_CONFIG.EXCHANGE_NAME}`);
+connectRabbitMQConsumer(io);
 
 httpServer.listen(PORT, () => {
   console.log(`websocket-server running on port ${PORT}`);
