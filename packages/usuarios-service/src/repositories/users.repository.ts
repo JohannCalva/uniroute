@@ -82,6 +82,52 @@ export async function emailAlreadyExists(email: string): Promise<boolean> {
   return result.rows[0]?.exists ?? false;
 }
 
+function toPublicUser(row: UserRow): User {
+  return {
+    id: row.id,
+    email: row.email,
+    nombre: row.nombre,
+    rol: row.rol,
+    createdAt: new Date(row.created_at).toISOString(),
+  };
+}
+
+export async function findAllUsers(): Promise<User[]> {
+  const result = await pool.query<UserRow>(
+    `
+    SELECT id, email, password_hash, nombre, rol, created_at
+    FROM usuarios
+    ORDER BY created_at DESC
+    `,
+  );
+
+  return result.rows.map(toPublicUser);
+}
+
+export async function updateUser(
+  id: string,
+  data: { nombre?: string; rol?: UserRole },
+): Promise<User | null> {
+  const result = await pool.query<UserRow>(
+    `
+    UPDATE usuarios
+    SET nombre = COALESCE($2, nombre),
+        rol = COALESCE($3, rol)
+    WHERE id = $1
+    RETURNING id, email, password_hash, nombre, rol, created_at
+    `,
+    [id, data.nombre ?? null, data.rol ?? null],
+  );
+
+  const row = result.rows[0];
+  return row ? toPublicUser(row) : null;
+}
+
+export async function deleteUser(id: string): Promise<boolean> {
+  const result = await pool.query(`DELETE FROM usuarios WHERE id = $1`, [id]);
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function createUser(data: CreateUserData): Promise<User> {
   const result = await pool.query<UserRow>(
     `

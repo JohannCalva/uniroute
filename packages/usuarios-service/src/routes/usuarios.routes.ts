@@ -6,13 +6,17 @@ import { generateBoardingToken } from '@uniroute/shared';
 import {
   loginUserSchema,
   registerUserSchema,
+  updateUserSchema,
 } from '../schemas';
 
 import {
   createUser,
+  deleteUser,
   emailAlreadyExists,
+  findAllUsers,
   findUserByEmail,
   findUserById,
+  updateUser,
 } from '../repositories/users.repository';
 
 import {
@@ -248,3 +252,105 @@ usuariosRouter.get(
     }
   },
 );
+
+/**
+ * Gestión de usuarios (solo ADMIN).
+ * El gateway ya restringe estas rutas a ADMIN vía RBAC; aquí se re-verifica
+ * el rol del header como defensa en profundidad (igual que /me/boarding-token).
+ */
+function requireAdmin(req: AuthenticatedRequest, res: import('express').Response): boolean {
+  if (!req.authUser) {
+    res.status(401).json({ error: 'Usuario no autenticado.', code: 'AUTH_CONTEXT_REQUIRED' });
+    return false;
+  }
+  if (req.authUser.role !== 'ADMIN') {
+    res.status(403).json({ error: 'Se requiere rol ADMIN.', code: 'ADMIN_REQUIRED' });
+    return false;
+  }
+  return true;
+}
+
+usuariosRouter.get('/', requireGatewayAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+
+    const users = await findAllUsers();
+    return res.status(200).json({ data: users, total: users.length });
+  } catch (error) {
+    console.error('[usuarios-service] list users error:', error);
+    return res.status(500).json({
+      error: 'Error interno al listar usuarios.',
+      code: 'LIST_USERS_INTERNAL_ERROR',
+    });
+  }
+});
+
+usuariosRouter.put('/:id', requireGatewayAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+
+    const parsedBody = updateUserSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json({
+        error: 'Validación fallida.',
+        code: 'VALIDATION_ERROR',
+        details: parsedBody.error.flatten().fieldErrors,
+      });
+    }
+
+    const updated = await updateUser(req.params.id, parsedBody.data);
+    if (!updated) {
+      return res.status(404).json({ error: 'Usuario no encontrado.', code: 'USER_NOT_FOUND' });
+    }
+
+    return res.status(200).json(updated);
+  } catch (error: any) {
+    // 22P02 = uuid inválido en el path param
+    if (error?.code === '22P02') {
+      return res.status(400).json({ error: 'ID de usuario inválido.', code: 'INVALID_ID' });
+    }
+    console.error('[usuarios-service] update user error:', error);
+    return res.status(500).json({
+      error: 'Error interno al actualizar usuario.',
+      code: 'UPDATE_USER_INTERNAL_ERROR',
+    });
+  }
+});
+
+usuariosRouter.delete('/:id', requireGatewayAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+
+    // Un admin no puede eliminarse a sí mismo (evita quedarse sin acceso).
+    if (req.authUser && req.params.id === req.authUser.id) {
+      return res.status(409).json({
+        error: 'No puedes eliminar tu propia cuenta.',
+        code: 'CANNOT_DELETE_SELF',
+      });
+    }
+
+    const deleted = await deleteUser(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Usuario no encontrado.', code: 'USER_NOT_FOUND' });
+    }
+
+    return res.status(200).json({ message: 'Usuario eliminado.' });
+  } catch (error: any) {
+    // 23503 = foreign key violation: el usuario tiene viajes/abordajes asociados
+    if (error?.code === '23503') {
+      return res.status(409).json({
+        error: 'No se puede eliminar: el usuario tiene viajes o abordajes registrados.',
+        code: 'USER_HAS_REFERENCES',
+      });
+    }
+    // 22P02 = uuid inválido
+    if (error?.code === '22P02') {
+      return res.status(400).json({ error: 'ID de usuario inválido.', code: 'INVALID_ID' });
+    }
+    console.error('[usuarios-service] delete user error:', error);
+    return res.status(500).json({
+      error: 'Error interno al eliminar usuario.',
+      code: 'DELETE_USER_INTERNAL_ERROR',
+    });
+  }
+});

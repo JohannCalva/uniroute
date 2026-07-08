@@ -18,13 +18,15 @@ export default function App() {
 
     const [buses, setBuses] = useState<any[]>([]);
     const [rutas, setRutas] = useState<any[]>([]);
-    const [busId, setBusId] = useState('');
-    const [rutaId, setRutaId] = useState('');
-    const [viajeActivo, setViajeActivo] = useState(false);
+    // La sesión de viaje se rehidrata desde localStorage para sobrevivir a una
+    // recarga del navegador / relanzamiento de la PWA (el backend mantiene el viaje activo).
+    const [busId, setBusId] = useState(() => localStorage.getItem('uniroute_busId') || '');
+    const [rutaId, setRutaId] = useState(() => localStorage.getItem('uniroute_rutaId') || '');
+    const [viajeActivo, setViajeActivo] = useState(() => localStorage.getItem('uniroute_viajeActivo') === 'true');
 
     const [activeTab, setActiveTab] = useState<'panel' | 'escaner'>('panel');
-    const [estadoActual, setEstadoActual] = useState<BusStatus>('AT_STOP');
-    const [lamportClock, setLamportClock] = useState(0);
+    const [estadoActual, setEstadoActual] = useState<BusStatus>(() => (localStorage.getItem('uniroute_estadoBus') as BusStatus) || 'AT_STOP');
+    const [lamportClock, setLamportClock] = useState(() => Number(localStorage.getItem('uniroute_lamport') || '0'));
     const [transmitiendoGps, setTransmitiendoGps] = useState(false);
     const [alertaProximidad, setAlertaProximidad] = useState<{ total: number, maxEta: number } | null>(null);
     const [scanResult, setScanResult] = useState<{ success: boolean; mensaje: string } | null>(null);
@@ -47,6 +49,25 @@ export default function App() {
     useEffect(() => {
         if (auth?.token) void flush();
     }, [auth?.token, flush]);
+
+    // Persistir/limpiar la sesión de viaje en un solo lugar. Al recargar la PWA,
+    // el conductor vuelve directo a su viaje en curso (bus, ruta, estado y reloj Lamport).
+    // Se limpia solo cuando termina el viaje (ARRIVED / finalizar) o cierra sesión.
+    useEffect(() => {
+        if (viajeActivo) {
+            localStorage.setItem('uniroute_viajeActivo', 'true');
+            localStorage.setItem('uniroute_busId', busId);
+            localStorage.setItem('uniroute_rutaId', rutaId);
+            localStorage.setItem('uniroute_estadoBus', estadoActual);
+            localStorage.setItem('uniroute_lamport', String(lamportClock));
+        } else {
+            localStorage.removeItem('uniroute_viajeActivo');
+            localStorage.removeItem('uniroute_busId');
+            localStorage.removeItem('uniroute_rutaId');
+            localStorage.removeItem('uniroute_estadoBus');
+            localStorage.removeItem('uniroute_lamport');
+        }
+    }, [viajeActivo, busId, rutaId, estadoActual, lamportClock]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();

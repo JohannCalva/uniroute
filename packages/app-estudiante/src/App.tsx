@@ -112,6 +112,22 @@ export default function App() {
     useEffect(() => {
         if (!rutaSeleccionada || !auth) return;
         setBusesActivos({});
+
+        // Foto inicial: consultar qué buses ya están activos en esta ruta (con estado en vivo en Redis),
+        // para pintarlos apenas se selecciona el trayecto, sin esperar el primer bus:gps del WebSocket.
+        fetch('/api/v1/buses', { headers: getHeaders() })
+            .then(res => res.json())
+            .then(busesResponse => {
+                const posicionesIniciales: Record<string, { lat: number, lng: number }> = {};
+                (busesResponse?.data || []).forEach((bus: any) => {
+                    if (bus.rutaAsignada?.id === rutaSeleccionada.id && bus.estadoEnVivo) {
+                        posicionesIniciales[bus.id] = { lat: bus.estadoEnVivo.lat, lng: bus.estadoEnVivo.lng };
+                    }
+                });
+                setBusesActivos(posicionesIniciales);
+            })
+            .catch(console.error);
+
         const socket: Socket = io('/', { path: '/socket.io/', transports: ['websocket'] });
 
         socket.on('connect', () => socket.emit('subscribe:route', { routeId: rutaSeleccionada.id }));

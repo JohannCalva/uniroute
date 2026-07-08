@@ -52,6 +52,27 @@ const permissionRules: PermissionRule[] = [
   },
 
   /**
+   * Gestión de usuarios (solo ADMIN).
+   * Nota: /usuarios/me y /usuarios/me/boarding-token están arriba y usan
+   * método GET; estas reglas de gestión no colisionan con ellas.
+   */
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/usuarios$/,
+    allowedRoles: ["ADMIN"],
+  },
+  {
+    method: "PUT",
+    pattern: /^\/api\/v1\/usuarios\/[^/]+$/,
+    allowedRoles: ["ADMIN"],
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/usuarios\/[^/]+$/,
+    allowedRoles: ["ADMIN"],
+  },
+
+  /**
    * Rutas públicas para usuarios autenticados
    */
   {
@@ -159,7 +180,7 @@ const permissionRules: PermissionRule[] = [
   {
     method: "POST",
     pattern: /^\/api\/v1\/despachos\/viaje\/finalizar$/,
-    allowedRoles: ["DRIVER"],
+    allowedRoles: ["DRIVER", "ADMIN"],
   },
   {
     method: "GET",

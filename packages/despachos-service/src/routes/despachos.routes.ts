@@ -17,7 +17,8 @@ router.post('/viaje/iniciar', requireGatewayAuth, requireRole(['DRIVER']), inici
 router.post('/estado', requireGatewayAuth, requireRole(['DRIVER']), cambiarEstado);
 router.post('/gps', requireGatewayAuth, requireRole(['DRIVER']), actualizarGps);
 router.post('/abordaje', requireGatewayAuth, requireRole(['DRIVER']), registrarAbordaje);
-router.post('/viaje/finalizar', requireGatewayAuth, requireRole(['DRIVER']), finalizarViaje);
+// ADMIN también puede finalizar (p.ej. si el conductor olvidó cerrar el viaje).
+router.post('/viaje/finalizar', requireGatewayAuth, requireRole(['DRIVER', 'ADMIN']), finalizarViaje);
 
 // Student routes
 router.post('/proximidad', requireGatewayAuth, requireRole(['STUDENT']), alertaProximidad);
