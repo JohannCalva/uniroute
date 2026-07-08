@@ -1,33 +1,60 @@
 import express from 'express';
 import cors from 'cors';
-import { SERVICE_REGISTRY, API_ROUTES } from '@uniroute/shared';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import morgan from 'morgan';
+
+import { createGatewayProxy } from './proxy';
+import { errorHandler } from './middleware/error-handler';
+import { authenticateJwt } from './middleware/auth';
+import { authorizeByRole } from './middleware/rbac';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT || 3000);
 
-app.use(cors());
-app.use(express.json());
+app.disable('x-powered-by');
+
+app.use(helmet());
+
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  }),
+);
+
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      error: 'Demasiadas peticiones. Intenta nuevamente más tarde.',
+      code: 'RATE_LIMIT_EXCEEDED',
+    },
+  }),
+);
+
+app.use(morgan('dev'));
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'api-gateway' });
+  res.status(200).json({
+    status: 'ok',
+    service: 'api-gateway',
+  });
 });
 
-app.use('/api/v1', (req, res) => {
-  const matchedPrefix = Object.keys(API_ROUTES).find((prefix) =>
-    req.path.startsWith(prefix.replace('/api/v1', '')),
-  );
-  const serviceName = matchedPrefix ? API_ROUTES[matchedPrefix] : null;
-  const serviceUrl = serviceName
-    ? SERVICE_REGISTRY[serviceName as keyof typeof SERVICE_REGISTRY]
-    : null;
+app.use('/api/v1', authenticateJwt, authorizeByRole, createGatewayProxy());
 
-  if (!serviceUrl) {
-    res.status(404).json({ error: 'Route not found', code: 'ROUTE_NOT_FOUND' });
-    return;
-  }
-
-  res.status(200).json({ proxying: serviceUrl, path: req.path });
+app.use((_req, res) => {
+  res.status(404).json({
+    error: 'Route not found',
+    code: 'ROUTE_NOT_FOUND',
+  });
 });
+
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`api-gateway running on port ${PORT}`);
